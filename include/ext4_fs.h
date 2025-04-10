@@ -23,4 +23,8 @@ uint8_t read_group_descriptor(struct ext4_fs *fs, struct ext4_group_descriptor *
 
 uint8_t read_inode(struct ext4_fs *fs, struct ext4_inode *inode, uint32_t inode_num);
 
+uint8_t read_physical_block(struct ext4_fs *fs, uint8_t *buffer, uint32_t physical_block_num);
+
+uint8_t read_logical_block(struct ext4_fs *fs, struct ext4_inode *inode, uint8_t *buffer, uint32_t logical_block_num);
+
 #endif /* EXT4_FS_H */
