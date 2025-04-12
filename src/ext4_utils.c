@@ -7,7 +7,8 @@ uint64_t fast_pow(uint32_t base, uint32_t power) {
     if (power % 2 == 1) {
         return base * fast_pow(base, power - 1);
     }
-    return fast_pow(base, power / 2) * fast_pow(base, power / 2);
+    uint64_t sqrt = fast_pow(base, power / 2);
+    return sqrt * sqrt;
 }
 
 int8_t resolve_addressing_level(uint32_t logical_block_num, const uint32_t block_size) {
