@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "crc32c.h"
 #include "ext4_structs.h"
 #include "ext4_utils.h"
 
@@ -29,14 +30,18 @@ uint8_t init_ext4_fs(const char *fname, struct ext4_fs *fs) {
         goto cleanup;
     }
 
-    if (!read_super_block(fs, fs->sb)) {
+    if (!read_primary_super_block(fs, fs->sb)) {
         fprintf(stderr, "ERROR: Could not read superblock\n");
         goto cleanup;
     }
 
-    if (fs->sb->s_magic != EXT4_S_MAGIC) {
-        fprintf(stderr, "ERROR: Wrong superblock magic. Filesystem either not ext4 or superblock is damaged\n");
-        goto cleanup;
+    if (!is_valid_super_block(fs->sb)) {
+        fprintf(stderr, "ERROR: Filesystem either not ext4 or primary superblock is damaged\n");
+
+        if (!read_backup_super_block(fs, fs->sb)) {
+            fprintf(stderr, "ERROR: No valid superblock backups found\n");
+            goto cleanup;
+        }
     }
 
     fs->block_size = 1024 << fs->sb->s_log_block_size;
@@ -82,9 +87,59 @@ cleanup:
     return 1;
 }
 
-uint8_t read_super_block(struct ext4_fs *fs, struct ext4_super_block *sb) {
+uint8_t read_primary_super_block(struct ext4_fs *fs, struct ext4_super_block *sb) {
     fseek(fs->img, 1024, SEEK_SET);
     return fread(sb, sizeof(struct ext4_super_block), 1, fs->img) == 1;
+}
+
+uint8_t read_super_block(struct ext4_fs *fs, struct ext4_super_block *sb, uint32_t block_num) {
+
+}
+
+uint8_t read_backup_super_block(struct ext4_fs *fs, struct ext4_super_block *sb) {
+    printf("Trying to read superblock backup...\n");
+
+    const uint32_t common_block_sizes[4] = {4096, 1024, 2048, 8192};
+    // Block groups 1, 3, 5, 7 and 9
+    const uint32_t common_backup_blocks[4][5] = {
+        {32768, 98304, 163840, 229376, 294912}, // 4K
+        {8193, 24577, 40961, 57345, 73729},     // 1K
+        {16384, 49152, 81920, 114688, 147456},  // 2K
+        {65528, 196584, 327640, 458696, 589752} // 8K
+    };
+
+    struct ext4_super_block super_block_backup;
+    for (int i = 0; i < 4; i++) {
+        printf("%dK blocks:\n", common_block_sizes[i] / 1024);
+
+        for (int j = 0; j < 5; j++) {
+            printf("  Block %d: ", common_backup_blocks[i][j]);
+
+            uint64_t offset = common_backup_blocks[i][j] * common_block_sizes[i];
+
+            if (fs->fs_size < offset) {
+                printf("SKIPPED (beyond filesystem size)\n");
+                break;
+            }
+
+            if (offset > LONG_MAX) {
+                printf("SKIPPED (long overflow)\n");
+                break;
+            }
+
+            fseeko64(fs->img, offset, SEEK_SET);
+            fread(&super_block_backup, sizeof(struct ext4_super_block), 1, fs->img);
+
+            if (is_valid_super_block(&super_block_backup)) {
+                memcpy(fs->sb, &super_block_backup, sizeof(struct ext4_super_block));
+                printf("SUCCEED\n");
+                return 1;
+            }
+
+            printf("FAILED\n");
+        }
+    }
+    return 0;
 }
 
 uint8_t read_group_descriptor(struct ext4_fs *fs, struct ext4_group_descriptor *gd) {
@@ -158,4 +213,22 @@ uint8_t read_logical_block(struct ext4_fs *fs, struct ext4_inode *inode, uint8_t
     free(block_buffer);
 
     return read_physical_block(fs, buffer, physical_block_num) == 1;
+}
+
+uint8_t is_valid_super_block(struct ext4_super_block *sb) {
+    if (sb->s_magic != EXT4_S_MAGIC) {
+        return 0;
+    }
+
+    struct ext4_super_block sb_copy;
+    memcpy(&sb_copy, sb, sizeof(struct ext4_super_block));
+
+    sb_copy.s_checksum = 0;
+
+    const uint32_t expected_csum = crc32c((uint8_t *) &sb_copy, sizeof(struct ext4_super_block) - 4);
+    if (sb->s_checksum != expected_csum) {
+        return 0;
+    }
+
+    return 1;
 }
