@@ -16,7 +16,7 @@ uint8_t init_ext4_fs(const char *fname, struct ext4_fs *fs) {
 
     fs->img = fopen(fname, "rb");
     if (fs->img == NULL) {
-        fprintf(stderr, "ERROR: Could not open file\n");
+        printf("ERROR: Could not open file\n");
         return 1;
     }
 
@@ -26,20 +26,20 @@ uint8_t init_ext4_fs(const char *fname, struct ext4_fs *fs) {
 
     fs->sb = malloc(sizeof(struct ext4_super_block));
     if (fs->sb == NULL) {
-        fprintf(stderr, "ERROR: Memory allocation for superblock failed\n");
+        printf("ERROR: Memory allocation for superblock failed\n");
         goto cleanup;
     }
 
     if (!read_primary_super_block(fs, fs->sb)) {
-        fprintf(stderr, "ERROR: Could not read superblock\n");
+        printf("ERROR: Could not read superblock\n");
         goto cleanup;
     }
 
     if (!is_valid_super_block(fs->sb)) {
-        fprintf(stderr, "ERROR: Filesystem either not ext4 or primary superblock is damaged\n");
+        printf("ERROR: Filesystem either not ext4 or primary superblock is damaged\n");
 
         if (!read_backup_super_block(fs, fs->sb)) {
-            fprintf(stderr, "ERROR: No valid superblock backups found\n");
+            printf("ERROR: No valid superblock backups found\n");
             goto cleanup;
         }
     }
@@ -57,19 +57,19 @@ uint8_t init_ext4_fs(const char *fname, struct ext4_fs *fs) {
 
     fs->gdt = malloc(sizeof(struct ext4_group_descriptor *) * fs->block_group_count);
     if (fs->gdt == NULL) {
-        fprintf(stderr, "ERROR: Memory allocation for GDT failed\n");
+        printf("ERROR: Memory allocation for GDT failed\n");
         goto cleanup;
     }
 
     for (int i = 0; i < fs->block_group_count; i++) {
         fs->gdt[i] = malloc(sizeof(struct ext4_group_descriptor));
         if (fs->gdt[i] == NULL) {
-            fprintf(stderr, "ERROR: Memory allocation for group descriptor failed\n");
+            printf("ERROR: Memory allocation for group descriptor failed\n");
             goto cleanup;
         }
 
         if (!read_group_descriptor(fs, fs->gdt[i])) {
-            fprintf(stderr, "ERROR: Could not read group descriptor\n");
+            printf("ERROR: Could not read group descriptor\n");
             goto cleanup;
         }
     }
